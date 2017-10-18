@@ -1,13 +1,20 @@
 package main
 
 import (
+	"archive/zip"
 	"bufio"
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"mime/multipart"
+	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 
 	_ "github.com/denisenkom/go-mssqldb"
 )
@@ -30,10 +37,62 @@ var (
 func main() {
 	getConfig()
 	getData()
+	zipFile("result.json", "result.zip")
+	sendFile("http://localhost/test/upload.php", "result.zip")
 }
 
 func getConfig() {
 
+}
+
+func sendFile(url, file string) (err error) {
+	// Prepare a form that you will submit to that URL.
+	var b bytes.Buffer
+	w := multipart.NewWriter(&b)
+	// Add your image file
+	f, err := os.Open(file)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fw, err := w.CreateFormFile("image", file)
+	if err != nil {
+		return
+	}
+	if _, err = io.Copy(fw, f); err != nil {
+		return
+	}
+	// Add the other fields
+	if fw, err = w.CreateFormField("key"); err != nil {
+		return
+	}
+	if _, err = fw.Write([]byte("KEY")); err != nil {
+		return
+	}
+	// Don't forget to close the multipart writer.
+	// If you don't close it, your request will be missing the terminating boundary.
+	w.Close()
+
+	// Now that you have a form, you can submit it to your handler.
+	req, err := http.NewRequest("POST", url, &b)
+	if err != nil {
+		return
+	}
+	// Don't forget to set the content type, this will contain the boundary.
+	req.Header.Set("Content-Type", w.FormDataContentType())
+
+	// Submit the request
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		return
+	}
+
+	// Check the response
+	if res.StatusCode != http.StatusOK {
+		err = fmt.Errorf("bad status: %s", res.Status)
+	}
+	return
 }
 
 func getData() {
@@ -93,4 +152,65 @@ func getData() {
 	}
 
 	defer rows.Close()
+}
+
+func zipFile(source, target string) error {
+	zipfile, err := os.Create(target)
+	if err != nil {
+		return err
+	}
+	defer zipfile.Close()
+
+	archive := zip.NewWriter(zipfile)
+	defer archive.Close()
+
+	info, err := os.Stat(source)
+	if err != nil {
+		return nil
+	}
+
+	var baseDir string
+	if info.IsDir() {
+		baseDir = filepath.Base(source)
+	}
+
+	filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+
+		if baseDir != "" {
+			header.Name = filepath.Join(baseDir, strings.TrimPrefix(path, source))
+		}
+
+		if info.IsDir() {
+			header.Name += "/"
+		} else {
+			header.Method = zip.Deflate
+		}
+
+		writer, err := archive.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		_, err = io.Copy(writer, file)
+		return err
+	})
+
+	return err
 }
