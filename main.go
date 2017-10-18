@@ -1,11 +1,8 @@
 package main
 
 import (
-	"flag"
-
-	_ "github.com/denisenkom/go-mssqldb"
-
 	"attendanceuploader/helpers"
+	"flag"
 )
 
 var (
