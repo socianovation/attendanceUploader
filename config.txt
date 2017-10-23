@@ -1,2 +1,1 @@
-company_id=1
-token=123123123123123123123
+database_name=att2000.mdb;middleware_url=http://localhost:8082/test/upload.php;auth_token=123
