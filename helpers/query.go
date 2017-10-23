@@ -9,16 +9,24 @@ import (
 	"fmt"
 	"log"
 	"os"
+
+	_ "github.com/mattn/go-adodb"
 )
 
 func GetData() {
 	flag.Parse()
 
-	conn, err := sql.Open("mssql", "server=localhost;user id=fingerprint;password=12345678;port=1433;database=fingerprint")
-	if err != nil {
-		log.Fatal("Open connection failed:", err.Error())
+	flag.Parse()
+
+	if _, err := os.Stat("att2000.mdb"); err != nil {
+		fmt.Println("put here empty database named 'example.mdb'.")
+		return
 	}
-	defer conn.Close()
+	conn, err := sql.Open("adodb", "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=att2000.mdb;")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	rows, err := conn.Query("SELECT COUNT(USERID) FROM CHECKINOUT")
 	var count int
@@ -26,7 +34,7 @@ func GetData() {
 		err = rows.Scan(&count)
 	}
 
-	rows, err = conn.Query("SELECT USERID, CHECKTIME, sn FROM CHECKINOUT")
+	rows, err = conn.Query("SELECT USERID, CHECKTIME, sn  FROM CHECKINOUT")
 	if err != nil {
 		log.Fatal("Failed query:", err.Error())
 	}
